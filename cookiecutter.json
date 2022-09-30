@@ -1,0 +1,20 @@
+{
+    "project_name": "pca-archunit",
+    "project_owner": "pcah",
+    "package_name": "archunit",
+    "project_slug": "pca-archunit",
+    "package_qualified_name": "pca.packages.archunit",
+    "package_path": "pca/packages/archunit",
+    "repo_url": "https://github.com/pcah/pca-archunit",
+    "docs_url": "https://pcah.github.io/pca-archunit",
+    "project_short_description": "A DSL & testing library for your architecture. Part of the python-clean-architecture project.",
+    "full_name": "lhaze",
+    "email": "github@lhaze.name",
+    "github_username": "lhaze",
+    "version": "0.0.1",
+    "command_line_interface": "Click",
+    "open_source_license": "MIT",
+    "docstrings_style": "google",
+    "use_mypy": "y",
+    "install_precommit_hooks": "y"
+}
