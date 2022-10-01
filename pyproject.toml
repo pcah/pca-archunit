@@ -63,6 +63,7 @@ pytest-cov  = {version = "^3.0.0", optional = true}
 toml = {version = "^0.10.2", optional = true}
 tox  = {version = "^3.25.0", optional = true}
 twine  = {version = "^4.0.0", optional = true}
+immutabledict = "^2.2.1"
 
 [tool.poetry.extras]
 test = [
@@ -72,6 +73,7 @@ test = [
     "flake8-typing-imports",
     "isort",
     "mypy",
+    "pdbpp",
     "pytest",
     "pytest-cov"
 ]
@@ -97,6 +99,9 @@ docs = [
 
 [tool.poetry.scripts]
 pca-archunit = "pca.packages.archunit.cli:main"
+
+[tool.poetry.group.dev.dependencies]
+pdbpp = "^0.10.3"
 
 [tool.black]
 line-length = 119
