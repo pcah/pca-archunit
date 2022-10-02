@@ -6,12 +6,15 @@ from .base import ArchUnit
 class Tags(ArchUnit):
     """Tags marks any object with a bunch of arbitrary marker."""
 
-    values: t.Tuple[str]
+    values: t.Tuple[str, ...]
 
-    def __init__(self, *tags) -> None:
+    def __init__(self, *tags: str) -> None:
         self.values = tuple(tags)
 
-    def update(self, new: "Tags") -> "Tags":
+    def update(self, new: ArchUnit) -> ArchUnit:
+        if not isinstance(new, Tags):
+            # TODO introduce lib errors
+            raise ValueError  # pragma: no cover
         return self.__class__(*(self.values + new.values))
 
     def __repr__(self) -> str:

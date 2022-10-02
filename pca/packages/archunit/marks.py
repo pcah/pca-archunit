@@ -3,12 +3,13 @@ from functools import wraps
 
 from .base import (
     ArchUnit,
+    ArchUnitTarget,
     set_archunit,
 )
 from .common import Tags
 from .container import Application
 
-T = t.TypeVar("T", bound="ArchUnit")
+T = t.TypeVar("T", bound=ArchUnitTarget)
 
 
 def mark(archunit_type: t.Type[ArchUnit]) -> t.Callable[..., t.Callable[[T], T]]:
