@@ -1,8 +1,5 @@
-from pca.packages.archunit import marks
-from pca.packages.archunit.base import (
-    get_archunit,
-    get_archunits,
-)
+import pytest
+
 from pca.packages.archunit.common import Tags
 from pca.packages.archunit.container import Application
 
