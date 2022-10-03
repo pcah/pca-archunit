@@ -1,5 +1,7 @@
 import pytest
 
+from pca.packages.archunit.base import ArchUnitRegister
+
 
 class AnyObject:
     pass
@@ -8,3 +10,8 @@ class AnyObject:
 @pytest.fixture
 def instance():
     return AnyObject()
+
+
+@pytest.fixture
+def register():
+    return ArchUnitRegister()

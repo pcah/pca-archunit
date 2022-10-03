@@ -1,5 +1,8 @@
 import typing as t
-from collections import ChainMap
+from collections import (
+    ChainMap,
+    defaultdict,
+)
 from dataclasses import dataclass
 
 from immutabledict import immutabledict
@@ -20,25 +23,37 @@ class ArchUnitTarget(t.Protocol):
     __archunit__: ArchUnitDict
 
 
-def set_archunit(instance: T, archunit: ArchUnit) -> T:
-    key = type(archunit)
-    if not hasattr(instance, "__archunit__"):
-        instance.__archunit__ = immutabledict({key: archunit})
-    elif key not in instance.__archunit__:
-        instance.__archunit__ = immutabledict(ChainMap({key: archunit}, instance.__archunit__))
-    else:
-        new_archunit = instance.__archunit__[key].update(archunit)
-        instance.__archunit__ = immutabledict(ChainMap({key: new_archunit}, instance.__archunit__))
-    return instance
+class ArchUnitRegister:
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._register = defaultdict(list)
 
+    def register(self, unit: ArchUnit) -> None:
+        self._register[type(unit)].append(unit)
 
-def get_archunits(instance: ArchUnitTarget) -> ArchUnitDict:
-    if not hasattr(instance, "__archunit__"):
-        return immutabledict()
-    return instance.__archunit__
+    def clear(self) -> None:
+        self._register.clear()
 
+    def set_archunit(self, target: T, unit: ArchUnit) -> T:
+        key = type(unit)
+        if not hasattr(target, "__unit__"):
+            target.__unit__ = immutabledict({key: unit})
+        elif key not in target.__unit__:
+            target.__unit__ = immutabledict(ChainMap({key: unit}, target.__unit__))
+        else:
+            new_unit = target.__unit__[key].update(unit)
+            target.__unit__ = immutabledict(ChainMap({key: new_unit}, target.__unit__))
+        self.register(unit)
+        return target
 
-def get_archunit(instance: ArchUnitTarget, archunit_type: t.Type[ArchUnit]) -> t.Optional[ArchUnit]:
-    if not hasattr(instance, "__archunit__"):
-        return None
-    return instance.__archunit__[archunit_type]
+    def get_archunits_for_target(self, target: ArchUnitTarget) -> ArchUnitDict:
+        if not hasattr(target, "__archunit__"):
+            return immutabledict()
+        return target.__archunit__
+
+    def get_archunit_of_type_for_target(
+        self, target: ArchUnitTarget, archunit_type: t.Type[ArchUnit]
+    ) -> t.Optional[ArchUnit]:
+        if not hasattr(target, "__archunit__"):
+            return None
+        return target.__archunit__[archunit_type]
