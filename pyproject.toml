@@ -2,18 +2,22 @@
 [tool.poetry]
 name = "pca-archunit"
 version = "0.0.1"
-description = "A DSL & testing library for your architecture. Part of the python-clean-architecture project."
+description = "A DSL & analysis library for testing architecture of your application. Part of the python-clean-architecture project."
 license =  "MIT"
 authors = [
     "lhaze <github@lhaze.name>"
 ]
 readme = "README.md"
-repository = "{cookiecutter.repo_url}}/"
+repository = "https://github.com/pcah/pca-archunit"
 documentation = "https://pcah.github.io/pca-archunit/"
 keywords = [
+    'architecture',
+    'architecture-visualization',
+    'archunit',
     'package',
     'pca',
     'python-clean-architecture',
+    'testing',
 ]
 classifiers=[
     "License :: OSI Approved :: MIT License",

@@ -1,7 +1,10 @@
 from sanic import Blueprint
 from sanic.response import json
 
-blueprint2 = Blueprint("bp_example2", url_prefix="/my_blueprint2")
+blueprint2 = Blueprint("blueprint-module-2", url_prefix="/my_blueprint2")
+
+
+links = [("blueprint-module-2.foo2", "foo-details")]
 
 
 @blueprint2.route("/foo")

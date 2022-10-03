@@ -6,4 +6,4 @@ blueprint3 = Blueprint("blueprint-module-3", url_prefix="/bp3")
 
 @blueprint3.route("/foo")
 async def index(request):
-    return await file("websocket.html")
+    return await file("file.html")
