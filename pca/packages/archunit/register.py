@@ -1,63 +1,48 @@
 import typing as t
-from collections import (
-    ChainMap,
-    defaultdict,
-)
-from functools import wraps
+from collections import defaultdict
 
-from immutabledict import immutabledict
-
-from .base import (
-    ArchUnit,
-    ArchUnitDict,
-    ArchUnitTarget,
-)
-
-T = t.TypeVar("T", bound=ArchUnitTarget)
+from .introspection import get_all_subclasses
+from .units.base import ArchUnit
 
 
-class ArchUnitRegister:
+class ArchUnitRegister(t.Collection[ArchUnit]):
     def __init__(self) -> None:
-        self._contents: t.Dict[t.Type[ArchUnit], t.List[ArchUnit]] = defaultdict(list)
+        self._index_per_unit: t.Dict[t.Type[ArchUnit], t.Set[ArchUnit]] = defaultdict(set)
+        self._index_per_target: t.Dict[t.Type, t.Set[ArchUnit]] = defaultdict(set)
 
-    def _register(self, unit: ArchUnit) -> None:
-        self._contents[type(unit)].append(unit)
+    def __iter__(self) -> t.Iterator[ArchUnit]:
+        yield from self.get_all_of_type(ArchUnit)
+
+    def __contains__(self, unit: object) -> bool:
+        if not isinstance(unit, ArchUnit):
+            return False
+        return unit in self._index_per_unit[type(unit)]
+
+    def __len__(self) -> int:
+        return sum(len(units) for k, units in self._index_per_unit.items())
+
+    def register(self, unit: ArchUnit) -> None:
+        self._index_per_unit[type(unit)].add(unit)
+        self._index_per_target[type(unit.target)].add(unit)
+
+    def register_multiple(self, units: t.Iterable[ArchUnit]) -> None:
+        for unit in units:
+            self.register(unit)
 
     def clear(self) -> None:
-        self._contents.clear()
+        self._index_per_unit.clear()
+        self._index_per_target.clear()
 
-    def set_archunit(self, target: T, unit: ArchUnit) -> T:
-        key = type(unit)
-        if not hasattr(target, "__archunit__"):
-            target.__archunit__ = immutabledict({key: unit})
-        elif key not in target.__archunit__:
-            target.__archunit__ = immutabledict(ChainMap({key: unit}, target.__archunit__))
-        else:
-            new_unit = target.__archunit__[key].update(unit)
-            target.__archunit__ = immutabledict(ChainMap({key: new_unit}, target.__archunit__))
-        self._register(unit)
-        return target
+    def get_all_of_type(self, unit_type: t.Type[ArchUnit]) -> t.Iterable[ArchUnit]:
+        for unit_type in get_all_subclasses(unit_type):
+            yield from self._index_per_unit[unit_type]
 
-    def get_archunits_for_target(self, target: ArchUnitTarget) -> ArchUnitDict:
-        if not hasattr(target, "__archunit__"):
-            return immutabledict()
-        return target.__archunit__
+    def get_all_for_target(self, target: t.Any) -> t.Iterable[ArchUnit]:
+        for unit in self._index_per_target[type(target)]:
+            if unit.target is target:
+                yield unit
 
-    def get_archunit_of_type_for_target(
-        self, target: ArchUnitTarget, archunit_type: t.Type[ArchUnit]
-    ) -> t.Optional[ArchUnit]:
-        if not hasattr(target, "__archunit__"):
-            return None
-        return target.__archunit__[archunit_type]
-
-    def mark(self, archunit_type: t.Type[ArchUnit]) -> t.Callable[..., t.Callable[[T], T]]:
-        def constructor(*args, **kwargs) -> t.Callable[[T], T]:
-            archunit = archunit_type(*args, **kwargs)
-
-            @wraps(archunit_type)
-            def setter(instance: T) -> T:
-                return self.set_archunit(instance, archunit)
-
-            return setter
-
-        return constructor
+    def get_all_of_type_for_target(self, target: t.Any, unit_type: t.Type[ArchUnit]) -> t.Iterable[ArchUnit]:
+        for unit in self._index_per_target[type(target)]:
+            if (unit.target is target) and isinstance(unit, unit_type):
+                yield unit
