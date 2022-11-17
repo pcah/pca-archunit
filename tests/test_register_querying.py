@@ -139,15 +139,3 @@ class TestGetAllOfTypeForTarget:
         assert set(example_register.get_all_of_type_for_target("1", Baz)) == {
             example_units_by_id[2],
         }
-
-
-# def test_empty_get_archunit(register, instance) -> None:
-#     assert register.get_archunit_of_type_for_target(instance, ArchUnit) is None
-
-
-# def test_empty_get_archunit(register, instance) -> None:
-#     assert register.get_archunit_of_type_for_target(instance, ArchUnit) is None
-
-
-# def test_empty_get_archunits(register, instance) -> None:
-#     assert register.get_archunits_for_target(instance) == immutabledict()

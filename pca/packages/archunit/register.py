@@ -1,6 +1,7 @@
 import typing as t
 from collections import defaultdict
 
+from .importing import maybe_dotted_name
 from .introspection import get_all_subclasses
 from .units.base import ArchUnit
 
@@ -20,6 +21,15 @@ class ArchUnitRegister(t.Collection[ArchUnit]):
 
     def __len__(self) -> int:
         return sum(len(units) for k, units in self._index_per_unit.items())
+
+    def include(self, where: t.Union[str, t.Any]) -> t.Any:
+        where = maybe_dotted_name(where)
+        if hasattr(where, "archunit_includeme"):
+            where.archunit_includeme(self)
+        return where
+
+    def autodiscover(where: t.Union[str, t.Any]):
+        where = maybe_dotted_name(where)
 
     def register(self, unit: ArchUnit) -> None:
         self._index_per_unit[type(unit)].add(unit)
