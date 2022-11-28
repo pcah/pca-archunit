@@ -1,10 +1,14 @@
-from importlib import import_module
-from types import ModuleType
 import inspect
 import os
-from pathlib import Path
+import pkgutil
 import sys
 import typing as t
+from importlib import import_module
+from pathlib import Path
+from types import ModuleType
+
+# TODO create own error classes
+OwnImportError = ValueError
 
 
 def maybe_dotted_name(sth: t.Any) -> t.Any:
@@ -32,50 +36,83 @@ def import_dotted_name(dotted_qualified_name: str) -> t.Any:
 
     TODO (tombstone Python 3.8 end of life: 2024-10)
     """
-    try:
-        if ":" in dotted_qualified_name:
-            module_path, qual_name = dotted_qualified_name.rsplit(":", 1)
-        else:
-            module_path, qual_name = dotted_qualified_name.rsplit(".", 1)
-    except ValueError as e:
-        msg = "'%s' doesn't look like a module path" % dotted_qualified_name
-        raise ImportError(msg) from e
+    if ":" in dotted_qualified_name:
+        module_path, attribute_path = dotted_qualified_name.rsplit(":", 1)
+    else:
+        module_path, attribute_path = dotted_qualified_name, None
 
     obj = import_module(module_path)
 
+    if attribute_path is None:
+        return obj
+
     try:
-        for chunk in qual_name.split("."):
+        for chunk in attribute_path.split("."):
             obj = getattr(obj, chunk)
     except AttributeError as e:
-        msg = "Module '%s' does not define a '%s' attribute/class" % (module_path, qual_name)
-        raise ImportError(msg) from e
+        raise ImportError(f"Module '{module_path}' does not define a '{attribute_path}' attribute/class") from e
     return obj
 
 
 _INIT_FILE_NAME = "__init__.py"
+_PYTHON_CODE_FILE_SUFFIXES = {".py", ".pyc"}
 
 
-def iterate_submodules(
-    package: t.Union[str, ModuleType], recursive: bool = True
+def iterate_modules(
+    target: t.Union[str, ModuleType], recursive: bool = True, include_packages: bool = False
 ) -> t.Generator[ModuleType, None, None]:
-    package = maybe_dotted_name(package)
-    if package.__file__ is None:  # case: PEP 420 – Implicit Namespace Packages
-        assert hasattr(package, "__path__"), "Unexpected: no __file__ and no __path__: check PEP 420 for such case."
-        package_paths = {Path(p) for p in package.__path__._path}
-    elif (path := Path(package.__file__)).name == _INIT_FILE_NAME:  # standard case for a package (__file__ points to an __init__.py)
-        package_paths = {path.parent}
-    elif path.suffix == ".py":  # standard case: a module
-        package_paths = {Path(package.__file__)}
-    # if package_path.endswith(_INIT_FILE_NAME):
-    #     package_path = os.path.dirname(os.path.abspath(package_path))
-    for path in package_paths:
-        if path.is_file() and path.suffix == ".py":
+    """
+    WARNING: for now, the function doesn't consider packed packages like zipfiles and eggs.
 
-    for py in [
-        filename[:-3] for filename in os.listdir(path) if filename.endswith(".py") and filename != "__init__.py"
-    ]:
-        module = __import__(".".join([_name, py]), fromlist=[py])
-        yield from inspect.getmembers(package, predicate=inspect.ismodule)
+    NB: alternative design than just using `pkgutil.walk_packages`, because `walk_packages` ignores
+    implicit packages.
+    """
+    target = maybe_dotted_name(target)
+    if not inspect.ismodule(target):
+        raise OwnImportError(f"Target '{target}' is not a valid module or package: `{type(target)}` instead.")
+
+    # we need to go deeper
+    if target.__file__ is None:
+        # case: PEP 420 – Implicit Namespace Packages
+        # multiple directories to traverse
+        # https://peps.python.org/pep-0420/
+        assert hasattr(target, "__path__"), "Unexpected: no __file__ and no __path__: check PEP 420 for such case."
+        target_paths = {Path(p) for p in target.__path__._path}
+    elif (path := Path(target.__file__)).name == _INIT_FILE_NAME:
+        # target is a standard case for a sourcefile-based package (__file__ points to an __init__.py)
+        target_paths = {path.parent}
+    elif path.suffix in _PYTHON_CODE_FILE_SUFFIXES:
+        # target is a standard case for a py-file
+        yield target
+        return
+
+    if include_packages:
+        yield target
+
+    for path in target_paths:
+        for module_info in pkgutil.walk_packages([str(path)]):
+            try:
+                subtarget = import_module(f"{target.__name__}.{module_info.name}")
+            except ImportError:
+                continue
+            if module_info.ispkg:
+                if recursive:
+                    # we need to go deeperer ;)
+                    yield from iterate_modules(subtarget, recursive=recursive, include_packages=include_packages)
+            else:
+                yield subtarget
+
+        if not recursive:
+            continue
+        # try with subtargets as PEP 420 – Implicit Namespace Packages
+        for subpath in path.iterdir():
+            if subpath.is_dir() and not (subpath / _INIT_FILE_NAME).exists():
+                try:
+                    subtarget = import_module(f"{target.__name__}.{subpath.name}")
+                except ImportError:
+                    continue
+                # we need to go deepererer ;)
+                yield from iterate_modules(subtarget, recursive=recursive, include_packages=include_packages)
 
 
 def import_all_names(_file, _name):
