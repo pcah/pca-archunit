@@ -1,4 +1,3 @@
-import inspect
 import os
 import pkgutil
 import sys
@@ -9,6 +8,7 @@ from types import ModuleType
 
 # TODO create own error classes
 OwnImportError = ValueError
+UnexpectedBehavior = RuntimeError
 
 
 def maybe_dotted_name(sth: t.Any) -> t.Any:
@@ -54,50 +54,89 @@ def import_dotted_name(dotted_qualified_name: str) -> t.Any:
     return obj
 
 
-_INIT_FILE_NAME = "__init__.py"
+_INIT_FILE_NAME = "__init__"
 _PYTHON_CODE_FILE_SUFFIXES = {".py", ".pyc"}
+_IGNORED_DIRECTORY_NAMES = {"__pycache__"}
 
 
-def iterate_modules(
+def iterate_modules(  # noqa: C901
     target: t.Union[str, ModuleType], recursive: bool = True, include_packages: bool = False
 ) -> t.Generator[ModuleType, None, None]:
     """
-    WARNING: for now, the function doesn't consider packed packages like zipfiles and eggs.
+    Imports and iterates through all modules of a given module.
 
-    NB: alternative design than just using `pkgutil.walk_packages`, because `walk_packages` ignores
+    * Supports PEP 420 (Implicit Namespace Packages), and so
+    may iterate through test modules in codebase, even if hidden in `tests` of non-init directory structure.
+    * May be recursive (by default) or not, depending on `recursive` flag.
+    * May include intermediate packages iff `include_packages` flag is on.
+    * NB: for now, the function doesn't consider packed packages like zipfiles and eggs.
+    * NB: extended design comparing of just using `pkgutil.walk_packages`, because `walk_packages` ignores
     implicit packages.
+
+    :param target: `builtins.module` object (which represents both single-file Python module and a Python package)
+        or Python qualified name of such an object to import.
+    :param recursive: looks into subpackages looking for modules (by default) or not.
+    :param include_packages: yield also the intermediate packages while looking for modules or not (by default)
+
+    Compare the following examples (order of the yields might be different, not all actual modules might be listed):
+
+    >> iterate_modules("pca.packages.archunit", recursive=False)
+    # pca.packages.archunit.cli
+    # pca.packages.archunit.importing
+    # pca.packages.archunit.introspection
+    # pca.packages.archunit.register
+
+    >> iterate_modules("pca.packages.archunit")
+    # pca.packages.archunit.cli
+    # pca.packages.archunit.importing
+    # pca.packages.archunit.introspection
+    # pca.packages.archunit.units.application   <--
+    # pca.packages.archunit.units.base          <--
+    # pca.packages.archunit.units.common        <--
+    # pca.packages.archunit.register
+
+    >> iterate_modules("pca.packages.archunit", recursive=False, include_packages=True)
+    # pca.packages.archunit.cli
+    # pca.packages.archunit.importing
+    # pca.packages.archunit.introspection
+    # pca.packages.archunit.units               <--
+    # pca.packages.archunit.register
+
+    >> iterate_modules("pca.packages.archunit", include_packages=True)
+    # pca.packages.archunit.cli
+    # pca.packages.archunit.importing
+    # pca.packages.archunit.introspection
+    # pca.packages.archunit.units               <--
+    # pca.packages.archunit.units.application   <--
+    # pca.packages.archunit.units.base          <--
+    # pca.packages.archunit.units.common        <--
+    # pca.packages.archunit.register
     """
     target = maybe_dotted_name(target)
-    if not inspect.ismodule(target):
+    if not isinstance(target, ModuleType):
         raise OwnImportError(f"Target '{target}' is not a valid module or package: `{type(target)}` instead.")
 
-    # we need to go deeper
-    if target.__file__ is None:
-        # case: PEP 420 – Implicit Namespace Packages
-        # multiple directories to traverse
-        # https://peps.python.org/pep-0420/
-        assert hasattr(target, "__path__"), "Unexpected: no __file__ and no __path__: check PEP 420 for such case."
-        target_paths = {Path(p) for p in target.__path__._path}
-    elif (path := Path(target.__file__)).name == _INIT_FILE_NAME:
-        # target is a standard case for a sourcefile-based package (__file__ points to an __init__.py)
-        target_paths = {path.parent}
-    elif path.suffix in _PYTHON_CODE_FILE_SUFFIXES:
-        # target is a standard case for a py-file
-        yield target
-        return
-
-    if include_packages:
-        yield target
+    target_paths = _get_modules_target_paths(target)
+    assert target_paths, f"`{target}` case is not covered by the function"
 
     for path in target_paths:
+        if path.suffix in _PYTHON_CODE_FILE_SUFFIXES:
+            # TODO is it possible for a py-file path to be other than from the case of py-file module?
+            yield target
+            continue
+        checked = set()
         for module_info in pkgutil.walk_packages([str(path)]):
+            checked.add(module_info.name)
             try:
                 subtarget = import_module(f"{target.__name__}.{module_info.name}")
-            except ImportError:
+            except ImportError:  # pragma: no cover
+                # TODO raise warning of non-importable package
                 continue
             if module_info.ispkg:
+                if include_packages:
+                    yield subtarget
                 if recursive:
-                    # we need to go deeperer ;)
+                    # we need to go deeper :)
                     yield from iterate_modules(subtarget, recursive=recursive, include_packages=include_packages)
             else:
                 yield subtarget
@@ -106,13 +145,39 @@ def iterate_modules(
             continue
         # try with subtargets as PEP 420 – Implicit Namespace Packages
         for subpath in path.iterdir():
-            if subpath.is_dir() and not (subpath / _INIT_FILE_NAME).exists():
-                try:
-                    subtarget = import_module(f"{target.__name__}.{subpath.name}")
-                except ImportError:
-                    continue
-                # we need to go deepererer ;)
-                yield from iterate_modules(subtarget, recursive=recursive, include_packages=include_packages)
+            if (
+                subpath.stem in checked  # these has been identified as packages earlier
+                or not subpath.is_dir()  # ignore non-dirs
+                or subpath.name in _IGNORED_DIRECTORY_NAMES  # specifically ignore some directories like Python cache
+            ):
+                continue
+            try:
+                subtarget = import_module(f"{target.__name__}.{subpath.name}")
+            except ImportError:
+                continue
+            if include_packages:
+                yield subtarget
+            # we need to go deeperer ;)
+            yield from iterate_modules(subtarget, recursive=recursive, include_packages=include_packages)
+
+
+def _get_modules_target_paths(target: ModuleType) -> t.Set[Path]:
+    if target.__file__ is None:
+        # case: PEP 420 – Implicit Namespace Packages
+        # multiple directories to traverse
+        # https://peps.python.org/pep-0420/
+        assert hasattr(target, "__path__"), "Unexpected: no __file__ and no __path__: check PEP 420 for such case."
+        # NB: Implicit packages' __path__ object - _NamespacePath class - has potential paths to codebase
+        # under `._path` attribute
+        return {Path(p) for p in getattr(target.__path__, "_path", ())}
+    elif (path := Path(target.__file__)).suffix in _PYTHON_CODE_FILE_SUFFIXES:
+        if path.stem == _INIT_FILE_NAME:
+            # target is a standard case for a sourcefile-based package (__file__ points to an __init__.py)
+            return {path.parent}
+        # target is standard case for a py-file module
+        return {path}
+
+    raise UnexpectedBehavior("Unsupported case for Python module path.")  # pragma: no cover
 
 
 def import_all_names(_file, _name):
