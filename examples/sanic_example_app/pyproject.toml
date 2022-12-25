@@ -6,7 +6,7 @@ version = "0.0.1"
 authors = []
 
 [tool.poetry.dependencies]
-python = ">=3.7,<4"
+python = ">=3.8,<4"
 sanic = "^22.9.0"
 
 [build-system]

@@ -86,7 +86,7 @@ You will first need to ensure you have all the tools of the dev environment inst
 - [`git`](https://git-scm.com/)
 - [`poetry`](https://python-poetry.org/)
 - [`cookiecutter`](https://cookiecutter.readthedocs.io/)
-- [Python with `3.7`, `3.8`, `3.9` & `3.10` versions](https://www.python.org/downloads/)
+- [Python with `3.8`, `3.9` & `3.10` versions](https://www.python.org/downloads/)
 - [`PyPy3.x`](https://www.pypy.org/)
 
 Then, clone the repository using `git` and place yourself in its directory:
